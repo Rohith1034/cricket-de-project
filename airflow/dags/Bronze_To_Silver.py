@@ -213,34 +213,34 @@ spark = SparkSession.builder \
 #         tranform_json_data(df,blob_name=blob_name)
 
 
-# def upload_parquet_files_to_GCS():
-#     client = storage.Client()
-#     bucket = client.bucket("project-cricket-silver")
-
-#     local_base_path = "/tmp/cricket_silver_output/"
-
-#     for root, dirs, files in os.walk(local_base_path):
-#         for file in files:
-
-#             local_file_path = os.path.join(root, file)
-
-#             # skip hidden/system files if needed
-#             if file.startswith("."):
-#                 continue
-
-#             relative_path = os.path.relpath(local_file_path, local_base_path)
-
-#             # this keeps folder structure in GCS
-#             gcs_blob_path = f"{relative_path}"
-
-#             blob = bucket.blob(gcs_blob_path)
-
-#             blob.upload_from_filename(local_file_path)
-
-#             print(f"Uploaded: {local_file_path} → gs://{bucket}/{gcs_blob_path}")
-
-
 def upload_parquet_files_to_GCS():
+    client = storage.Client()
+    bucket = client.bucket("project-cricket-silver")
+
+    local_base_path = "/tmp/cricket_silver_output/"
+
+    for root, dirs, files in os.walk(local_base_path):
+        for file in files:
+
+            local_file_path = os.path.join(root, file)
+
+            # skip hidden/system files if needed
+            if file.startswith("."):
+                continue
+
+            relative_path = os.path.relpath(local_file_path, local_base_path)
+
+            # this keeps folder structure in GCS
+            gcs_blob_path = f"{relative_path}"
+
+            blob = bucket.blob(gcs_blob_path)
+
+            blob.upload_from_filename(local_file_path)
+
+            print(f"Uploaded: {local_file_path} → gs://{bucket}/{gcs_blob_path}")
+
+
+def validate_count():
 
     client = storage.Client()
 
@@ -255,73 +255,32 @@ def upload_parquet_files_to_GCS():
     total_local_files = 0
     uploaded_files = 0
 
-    # ==========================================
-    # UPLOAD FILES
-    # ==========================================
-
-    for root, dirs, files in os.walk(local_base_path):
-
+    for root,dirs,files in os.walk(local_base_path):
         for file in files:
-
-            # skip hidden/system files
             if file.startswith("."):
                 continue
-
             total_local_files += 1
 
-            local_file_path = os.path.join(root, file)
-
-            relative_path = os.path.relpath(
-                local_file_path,
-                local_base_path
-            )
-
-            # keeps same folder structure in GCS
-            gcs_blob_path = relative_path
-
-            blob = bucket.blob(gcs_blob_path)
-
-            blob.upload_from_filename(local_file_path)
-
-            uploaded_files += 1
-
-            print(
-                f"Uploaded: {local_file_path} "
-                f"→ gs://project-cricket-silver/{gcs_blob_path}"
-            )
-
-    # ==========================================
-    # VALIDATION
-    # ==========================================
-
-    print("\n========== VALIDATION ==========")
-
-    print(f"Total Local Files Found : {total_local_files}")
-
-    print(f"Total Files Uploaded    : {uploaded_files}")
-
-    if total_local_files == uploaded_files:
-        print("✅ ALL FILES UPLOADED SUCCESSFULLY")
-    else:
-        print("❌ FILE COUNT MISMATCH")
-
-    # ==========================================
-    # OPTIONAL : VALIDATE GCS COUNT
-    # ==========================================
-
-    gcs_files_count = 0
-
     blobs = bucket.list_blobs()
-
     for blob in blobs:
-        gcs_files_count += 1
+        if blob.name.startswith("."):
+            continue
 
-    print(f"Total Files Present In GCS : {gcs_files_count}")
+        uploaded_files += 1
 
-    if uploaded_files == gcs_files_count:
-        print("✅ GCS VALIDATION SUCCESS")
+    print(uploaded_files, total_local_files)
+
+    if uploaded_files == total_local_files:
+        print("=========================================================")
+        print("Validation ✅ ")
+        print("=========================================================")
+    
     else:
-        print("❌ GCS VALIDATION FAILED")
+        print("=========================================================")
+        print("❌ FILE COUNT MISMATCH")
+        print("=========================================================")
+    
+
         
 
 # =========================================================
@@ -352,15 +311,15 @@ with DAG(
     #     python_callable=get_google_info
     # )
 
-    # task3 = PythonOperator(
-    #     task_id = "upload_parquet_files_to_GCS",
-    #     python_callable = upload_parquet_files_to_GCS
-    # )
-
-    task1 = PythonOperator(
-        task_id = "upload_status",
+    task3 = PythonOperator(
+        task_id = "upload_parquet_files_to_GCS",
         python_callable = upload_parquet_files_to_GCS
     )
 
+    task1 = PythonOperator(
+        task_id = "upload_status",
+        python_callable = validate_count
+    )
+
     # DEPENDENCY
-    task1
+    task3 >> task1
